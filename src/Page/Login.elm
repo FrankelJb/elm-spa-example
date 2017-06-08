@@ -1,21 +1,24 @@
-module Page.Login exposing (view, update, Model, Msg, initialModel, ExternalMsg(..))
+module Page.Login exposing (view, update, Model, Msg, initialModel, ExternalMsg(..), subscriptions)
 
 {-| The login page.
 -}
 
-import Route exposing (Route)
+import Animation exposing (percent, px)
+import Animation.Messenger
+import Data.Session as Session exposing (Session)
+import Data.User as User exposing (User)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
-import Views.Form as Form
-import Json.Decode as Decode exposing (field, decodeString, string, Decoder)
-import Json.Decode.Pipeline as Pipeline exposing (optional, decode)
-import Validate exposing (..)
-import Data.Session as Session exposing (Session)
 import Http
+import Json.Decode as Decode exposing (Decoder, decodeString, field, string)
+import Json.Decode.Pipeline as Pipeline exposing (decode, optional)
 import Request.User exposing (storeSession)
+import Route exposing (Route)
 import Util exposing ((=>))
-import Data.User as User exposing (User)
+import Validate exposing (..)
+import Views.Form as Form
+import Views.Page exposing (modal)
 
 
 -- MODEL --
@@ -25,6 +28,9 @@ type alias Model =
     { errors : List Error
     , email : String
     , password : String
+    , modalActive : Bool
+    , modalStyle : Animation.Messenger.State Msg
+    , modalBackgroundStyle : Animation.Messenger.State Msg
     }
 
 
@@ -33,6 +39,9 @@ initialModel =
     { errors = []
     , email = ""
     , password = ""
+    , modalActive = False
+    , modalStyle = styleYAxisAndOpacity -100 0
+    , modalBackgroundStyle = styleOpacity 0
     }
 
 
@@ -56,12 +65,25 @@ view session model =
                     ]
                 ]
             ]
+        , viewModal model
         ]
+
+
+viewModal : Model -> Html Msg
+viewModal model =
+    modal
+        { title = text "Hello Modal"
+        , content = text "I am  a modal"
+        , cardAttrs = (Animation.render model.modalStyle)
+        , isActive = model.modalActive
+        , backgroundAttrs = (Animation.render model.modalBackgroundStyle)
+        }
+        (MyAnimationMsg HideModal)
 
 
 viewForm : Html Msg
 viewForm =
-    Html.form [ onSubmit SubmitForm ]
+    div []
         [ Form.input
             [ class "form-control-lg"
             , placeholder "Email"
@@ -74,8 +96,16 @@ viewForm =
             , onInput SetPassword
             ]
             []
-        , button [ class "btn btn-lg btn-primary pull-xs-right" ]
+        , button [ onClick <| MyAnimationMsg ShowModal, class "btn btn-lg btn-primary pull-xs-right" ]
             [ text "Sign in" ]
+        ]
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.batch
+        [ Animation.subscription (MyAnimationMsg << AnimateModal) [ model.modalStyle ]
+        , Animation.subscription (MyAnimationMsg << AnimateModalBackground) [ model.modalBackgroundStyle ]
         ]
 
 
@@ -88,6 +118,15 @@ type Msg
     | SetEmail String
     | SetPassword String
     | LoginCompleted (Result Http.Error User)
+    | MyAnimationMsg MyAnimation
+    | DeactivateModal
+
+
+type MyAnimation
+    = AnimateModal Animation.Msg
+    | AnimateModalBackground Animation.Msg
+    | ShowModal
+    | HideModal
 
 
 type ExternalMsg
@@ -97,7 +136,16 @@ type ExternalMsg
 
 update : Msg -> Model -> ( ( Model, Cmd Msg ), ExternalMsg )
 update msg model =
-    case msg of
+    case Debug.log "msg" msg of
+        MyAnimationMsg animMsg ->
+            updateAnimation model animMsg
+                => NoOp
+
+        DeactivateModal ->
+            { model | modalActive = False }
+                => Cmd.none
+                => NoOp
+
         SubmitForm ->
             case validate model of
                 [] ->
@@ -140,6 +188,47 @@ update msg model =
             model
                 => Cmd.batch [ storeSession user, Route.modifyUrl Route.Home ]
                 => SetUser user
+
+
+updateAnimation : Model -> MyAnimation -> ( Model, Cmd Msg )
+updateAnimation model animation =
+    case Debug.log "animation" animation of
+        AnimateModal animMsg ->
+            Animation.Messenger.update animMsg model.modalStyle
+                |> Tuple.mapFirst (\newStyle -> { model | modalStyle = newStyle })
+
+        AnimateModalBackground animMsg ->
+            Animation.Messenger.update animMsg model.modalBackgroundStyle
+                |> Tuple.mapFirst (\newStyle -> { model | modalBackgroundStyle = newStyle })
+
+        ShowModal ->
+            let
+                startStyle =
+                    fadeInDown <| styleYAxisAndOpacity -100 0
+
+                backgroundStartStyle =
+                    fadeIn <| styleOpacity 0
+            in
+                { model
+                    | modalActive = True
+                    , modalStyle = startStyle
+                    , modalBackgroundStyle = backgroundStartStyle
+                }
+                    => Cmd.none
+
+        HideModal ->
+            let
+                startStyle =
+                    fadeOutUpWithMessage DeactivateModal <| styleYAxisAndOpacity 1 1
+
+                backgroundStartStyle =
+                    fadeOut <| styleOpacity 1
+            in
+                { model
+                    | modalStyle = startStyle
+                    , modalBackgroundStyle = backgroundStartStyle
+                }
+                    => Cmd.none
 
 
 
@@ -200,3 +289,61 @@ optionalError fieldName =
             String.join " " [ fieldName, errorMessage ]
     in
         optional fieldName (Decode.list (Decode.map errorToString string)) []
+
+
+
+-- ANIMATIONS --
+
+
+fadeIn : Animation.Messenger.State msg -> Animation.Messenger.State msg
+fadeIn =
+    Animation.interrupt
+        [ Animation.to
+            [ Animation.opacity 1
+            ]
+        ]
+
+
+fadeInDown : Animation.Messenger.State msg -> Animation.Messenger.State msg
+fadeInDown =
+    Animation.interrupt
+        [ Animation.to
+            [ Animation.translate3d (px 0) (percent 1) (px 0)
+            , Animation.opacity 1
+            ]
+        ]
+
+
+fadeOut : Animation.Messenger.State msg -> Animation.Messenger.State msg
+fadeOut =
+    Animation.interrupt
+        [ Animation.to
+            [ Animation.opacity 0
+            ]
+        ]
+
+
+fadeOutUpWithMessage : msg -> Animation.Messenger.State msg -> Animation.Messenger.State msg
+fadeOutUpWithMessage func =
+    Animation.interrupt
+        [ Animation.to
+            [ Animation.translate3d (px 0) (percent -100) (px 0)
+            , Animation.opacity 0
+            ]
+        , Animation.Messenger.send func
+        ]
+
+
+styleOpacity : Float -> Animation.Messenger.State msg
+styleOpacity opacity =
+    Animation.style
+        [ Animation.opacity opacity
+        ]
+
+
+styleYAxisAndOpacity : Float -> Float -> Animation.Messenger.State msg
+styleYAxisAndOpacity y opacity =
+    Animation.style
+        [ Animation.translate3d (px 0) (percent y) (px 0)
+        , Animation.opacity opacity
+        ]

@@ -1,19 +1,17 @@
-module Views.Page exposing (frame, ActivePage(..), bodyId)
+module Views.Page exposing (frame, ActivePage(..), bodyId, modal)
 
 {-| The frame around a typical page - that is, the header and footer.
 -}
 
-import Route exposing (Route)
-import Route exposing (Route)
-import Html exposing (..)
-import Html.Attributes exposing (..)
-import Route exposing (Route)
 import Data.User as User exposing (User, Username)
 import Data.UserPhoto as UserPhoto exposing (UserPhoto)
-import Html
+import Html exposing (Html, a, button, div, footer, header, i, img, li, nav, p, section, span, text, ul)
+import Html.Attributes exposing (..)
+import Html.Events exposing (onClick)
 import Html.Lazy exposing (lazy2)
-import Views.Spinner exposing (spinner)
+import Route exposing (Route)
 import Util exposing ((=>))
+import Views.Spinner exposing (spinner)
 
 
 {-| Determines which navbar link (if any) will be rendered as active.
@@ -115,3 +113,37 @@ in the pagination sense.
 bodyId : String
 bodyId =
     "page-body"
+
+
+modal :
+    { r
+        | title : Html msg
+        , content : Html msg
+        , cardAttrs : List (Html.Attribute msg)
+        , isActive : Bool
+        , backgroundAttrs : List (Html.Attribute msg)
+    }
+    -> msg
+    -> Html msg
+modal { title, content, cardAttrs, isActive, backgroundAttrs } triggerMsg =
+    let
+        classes =
+            classList
+                [ ( "modal", True )
+                , ( "is-active", isActive )
+                ]
+    in
+        div [ classes ]
+            [ div (class "modal-background" :: backgroundAttrs) []
+            , div (class "modal-card" :: cardAttrs)
+                [ header [ class "modal-card-head" ]
+                    [ p [ class "modal-card-title" ] [ title ]
+                    , button [ onClick triggerMsg ] [ i [ class "ion-close" ] [] ]
+                    ]
+                , section [ class "modal-card-body" ] [ content ]
+                , footer [ class "modal-card-foot" ]
+                    [ a [ class "btn btn-lg" ] [ text "Save changes" ]
+                    , a [ class "btn btn-lg btn-primary", onClick triggerMsg ] [ text "Cancel" ]
+                    ]
+                ]
+            ]

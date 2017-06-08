@@ -207,8 +207,8 @@ pageSubscriptions page =
         Home _ ->
             Sub.none
 
-        Login _ ->
-            Sub.none
+        Login model ->
+            Sub.map LoginMsg (Login.subscriptions model)
 
         Register _ ->
             Sub.none
@@ -257,7 +257,7 @@ setRoute maybeRoute model =
             Nothing ->
                 { model | pageState = Loaded NotFound } => Cmd.none
 
-            Just Route.NewArticle ->
+            Just (Route.NewArticle) ->
                 case model.session.user of
                     Just user ->
                         { model | pageState = Loaded (Editor Nothing Editor.initNew) } => Cmd.none
@@ -273,7 +273,7 @@ setRoute maybeRoute model =
                     Nothing ->
                         errored Page.Other "You must be signed in to edit an article."
 
-            Just Route.Settings ->
+            Just (Route.Settings) ->
                 case model.session.user of
                     Just user ->
                         { model | pageState = Loaded (Settings (Settings.init user)) } => Cmd.none
@@ -281,13 +281,13 @@ setRoute maybeRoute model =
                     Nothing ->
                         errored Page.Settings "You must be signed in to access your settings."
 
-            Just Route.Home ->
+            Just (Route.Home) ->
                 transition HomeLoaded (Home.init model.session)
 
-            Just Route.Login ->
+            Just (Route.Login) ->
                 { model | pageState = Loaded (Login Login.initialModel) } => Cmd.none
 
-            Just Route.Logout ->
+            Just (Route.Logout) ->
                 let
                     session =
                         model.session
@@ -298,7 +298,7 @@ setRoute maybeRoute model =
                             , Route.modifyUrl Route.Home
                             ]
 
-            Just Route.Register ->
+            Just (Route.Register) ->
                 { model | pageState = Loaded (Register Register.initialModel) } => Cmd.none
 
             Just (Route.Profile username) ->
